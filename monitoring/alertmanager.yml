@@ -1,0 +1,34 @@
+global:
+  resolve_timeout: 5m
+
+  # Configuración SMTP
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'santiesparraro@gmail.com'
+  smtp_auth_username: 'santiesparraro@gmail.com'
+  smtp_auth_password: 'uwsr faua pfgt hotb'  # NO uses tu contraseña normal
+  smtp_require_tls: true
+  smtp_hello: 'localhost'
+
+
+# Ruta principal de alertas
+route:
+  receiver: 'email-y-webhook'
+  group_by: ['alertname', 'severity']
+  group_wait: 5s
+  group_interval: 10s
+  repeat_interval: 5m
+  
+
+# Receptores de alertas
+receivers:
+  - name: 'email-y-webhook'
+    # Enviar correos
+    email_configs:
+      - to: 'arce.sebastian.3807@eam.edu.co'
+        send_resolved: true
+        headers:
+          Subject: '🚨 Alerta PetCare: {{ .GroupLabels.alertname }}'
+    # Y también webhook al autoscaler
+    webhook_configs:
+      - url: 'http://autoscaler:5000/webhook'
+        send_resolved: true

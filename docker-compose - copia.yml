@@ -1,0 +1,149 @@
+
+services:
+  # ========================================
+  # MongoDB Replica Set (3 nodos)
+  # ========================================
+  
+  mongo1:
+    image: mongo:6
+    container_name: mongo1
+    hostname: mongo1
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo1-data:/data/db
+      - ./mongo/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - petcare-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  mongo2:
+    image: mongo:6
+    container_name: mongo2
+    hostname: mongo2
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo2-data:/data/db
+    networks:
+      - petcare-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  mongo3:
+    image: mongo:6
+    container_name: mongo3
+    hostname: mongo3
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo3-data:/data/db
+    networks:
+      - petcare-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ========================================
+  # Réplicas de la API Spring Boot
+  # ========================================
+  
+  app1:
+    build: ./app
+    container_name: app1
+    environment:
+      - INSTANCE=app1
+      - PORT=3000
+      - DB_HOST=mongo1,mongo2,mongo3
+      - DB_PORT=27017
+      - DB_NAME=petcare
+      - DB_REPLICA_SET=rs0
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
+    networks:
+      - petcare-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  app2:
+    build: ./app
+    container_name: app2
+    environment:
+      - INSTANCE=app2
+      - PORT=3000
+      - DB_HOST=mongo1,mongo2,mongo3
+      - DB_PORT=27017
+      - DB_NAME=petcare
+      - DB_REPLICA_SET=rs0
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
+    networks:
+      - petcare-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ========================================
+  # Balanceador de Carga Nginx
+  # ========================================
+  
+  nginx:
+    image: nginx:stable-alpine
+    container_name: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app1
+      - app2
+    networks:
+      - petcare-network
+
+# ========================================
+# Redes y Volúmenes
+# ========================================
+
+networks:
+  petcare-network:
+    driver: bridge
+
+volumes:
+  mongo1-data:
+    driver: local
+  mongo2-data:
+    driver: local
+  mongo3-data:
+    driver: local

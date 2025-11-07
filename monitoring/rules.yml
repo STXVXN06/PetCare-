@@ -1,0 +1,93 @@
+groups:
+  - name: petcare-alerts
+    interval: 10s
+    rules:
+      - alert: CPUAlta
+        expr: avg(rate(container_cpu_usage_seconds_total[2m])) * 100 > 30
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Uso alto de CPU detectado"
+          description: "El contenedor supera el 80% de CPU durante más de 1 minuto."
+
+      # Alerta por alto uso de memoria
+      - alert: HighMemoryUsage
+        expr: |
+          (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 80
+        for: 2m
+        labels:
+          severity: warning
+          service: petcare-app
+        annotations:
+          summary: "Alto uso de memoria JVM"
+          description: "La instancia {{ $labels.instance }} está usando {{ $value }}% de memoria heap"
+
+      # Alerta por muchos errores HTTP
+      - alert: HighErrorRate
+        expr: |
+          rate(http_server_requests_seconds_count{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          service: petcare-app
+        annotations:
+          summary: "Alta tasa de errores HTTP 5xx"
+          description: "Se detectaron {{ $value }} errores/segundo en {{ $labels.instance }}"
+
+      # Alerta por contenedor con CPU alta (desde cAdvisor)
+      - alert: ContainerHighCPU
+        expr: |
+          sum(rate(container_cpu_usage_seconds_total{name=~"petcare.*"}[2m])) by (name) * 100 > 70
+        for: 1m
+        labels:
+          severity: warning
+          service: container
+        annotations:
+          summary: "Contenedor con CPU alta"
+          description: "El contenedor {{ $labels.name }} está usando {{ $value }}% de CPU"
+
+      # Alerta sincronizada con el autoscaler
+      - alert: CPUAutoScalerTrigger
+        expr: |
+          (sum(rate(container_cpu_usage_seconds_total{name=~"petcare.*"}[30s])) by (name))
+          /
+          sum(container_spec_cpu_quota{name=~"petcare.*"} / container_spec_cpu_period{name=~"petcare.*"}) by (name)
+          * 100 > 30
+        for: 30s
+        labels:
+          severity: info
+          service: petcare-app
+        annotations:
+          summary: "Autoescalado activado (CPU > 30%)"
+          description: "El servicio PetCare alcanzó {{ $value }}% de CPU. El autoscaler ejecutará una réplica adicional."
+
+
+
+
+      - alert: CPULowUsage
+        expr: |
+          sum(rate(container_cpu_usage_seconds_total{name=~"petcare.*"}[2m])) by (name) * 100 < 20
+        for: 30s
+        labels:
+          severity: info
+          service: petcare-app
+        annotations:
+          summary: "Autoescalado reducido (CPU < 20%)"
+          description: "El servicio PetCare bajó a {{ $value }}% de CPU. Se reducirá una réplica."
+
+      # ======================================================
+      # ALERTA DE PRUEBA (SIEMPRE ACTIVA)
+      # ======================================================
+      - alert: AlwaysOnTestAlert
+        expr: vector(1)
+        for: 10s
+        labels:
+          severity: info
+          service: test
+        annotations:
+          summary: "🚀 Prueba de Alerta Activa"
+          description: "Esta alerta se dispara siempre. Sirve para probar el envío de correos desde Alertmanager."
+
+      
+      
