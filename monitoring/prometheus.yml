@@ -1,5 +1,5 @@
 global:
-  scrape_interval: 5s
+  scrape_interval: 30s
 
 rule_files:
   - "rules.yml"

@@ -24,7 +24,7 @@ receivers:
   - name: 'email-y-webhook'
     # Enviar correos
     email_configs:
-      - to: 'arce.sebastian.3807@eam.edu.co'
+      - to: 'santiago.parra.contacto@gmail.com'
         send_resolved: true
         headers:
           Subject: '🚨 Alerta PetCare: {{ .GroupLabels.alertname }}'

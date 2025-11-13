@@ -63,6 +63,17 @@ groups:
           description: "El servicio PetCare alcanzó {{ $value }}% de CPU. El autoscaler ejecutará una réplica adicional."
 
 
+      # Aplicacion caida por 1 minutos
+      - alert: ApplicationDown
+        expr: |
+          up{job="petcare-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: petcare-app
+        annotations:
+          summary: "Aplicación no disponible"
+          description: "La instancia {{ $labels.instance }} no está respondiendo"
 
 
       - alert: CPULowUsage
