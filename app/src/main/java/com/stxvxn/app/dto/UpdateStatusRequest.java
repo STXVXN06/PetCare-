@@ -1,51 +1,27 @@
 package com.stxvxn.app.dto;
 
 import com.stxvxn.app.model.PackageStatus;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import lombok.Data;
 
 /**
- * DTO para actualizar el estado de un paquete
+ * DTO para actualizar el estado de un paquete.
  */
+@Data
 public class UpdateStatusRequest {
+    
+    @NotNull(message = "El estado es requerido")
     private PackageStatus status;
-    private String updatedBy; // Empleado que actualiza
-    private String notes; // Notas adicionales
-    private String location; // Ubicación actual (opcional)
     
-    // Constructor vacío
-    public UpdateStatusRequest() {
-    }
+    @NotBlank(message = "El ID del empleado es requerido")
+    private String updatedBy;
     
-    // Getters y Setters
-    public PackageStatus getStatus() {
-        return status;
-    }
+    @Size(max = 500, message = "Las notas no pueden exceder 500 caracteres")
+    private String notes;
     
-    public void setStatus(PackageStatus status) {
-        this.status = status;
-    }
-    
-    public String getUpdatedBy() {
-        return updatedBy;
-    }
-    
-    public void setUpdatedBy(String updatedBy) {
-        this.updatedBy = updatedBy;
-    }
-    
-    public String getNotes() {
-        return notes;
-    }
-    
-    public void setNotes(String notes) {
-        this.notes = notes;
-    }
-    
-    public String getLocation() {
-        return location;
-    }
-    
-    public void setLocation(String location) {
-        this.location = location;
-    }
+    @Size(max = 200, message = "La ubicación no puede exceder 200 caracteres")
+    private String location;
 }
 

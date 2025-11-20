@@ -3,7 +3,7 @@
 SERVICE_NAME="petcare_app"
 MAX_REPLICAS=5
 MIN_REPLICAS=2
-CPU_THRESHOLD_HIGH=60  # ✅ Aumentado de 30% a 60%
+CPU_THRESHOLD_HIGH=40  # ✅ Aumentado de 30% a 60%
 CPU_THRESHOLD_LOW=20
 CHECK_INTERVAL=30      # ✅ Aumentado de 15s a 30s
 COOLDOWN_PERIOD=120    # ✅ NUEVO: Esperar 2 minutos después de escalar

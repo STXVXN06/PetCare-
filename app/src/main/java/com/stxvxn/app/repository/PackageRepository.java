@@ -1,6 +1,8 @@
 package com.stxvxn.app.repository;
 
 import com.stxvxn.app.model.PackageStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
@@ -22,6 +24,11 @@ public interface PackageRepository extends MongoRepository<com.stxvxn.app.model.
      * Busca todos los paquetes con un estado específico
      */
     List<com.stxvxn.app.model.Package> findByStatus(PackageStatus status);
+    
+    /**
+     * Busca todos los paquetes con un estado específico con paginación
+     */
+    Page<com.stxvxn.app.model.Package> findByStatus(PackageStatus status, Pageable pageable);
     
     /**
      * Busca paquetes por teléfono del destinatario

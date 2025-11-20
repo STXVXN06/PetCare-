@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6
+    container_name: mongodb-petcare
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: petcare
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - petcare-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: petcare-app
+    ports:
+      - "3000:3000"
+    environment:
+      - INSTANCE=app-1
+      - PORT=3000
+      - DB_HOST=mongodb
+      - DB_PORT=27017
+      - DB_NAME=petcare
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - petcare-network
+    restart: unless-stopped
+
+volumes:
+  mongodb-data:
+
+networks:
+  petcare-network:
+    driver: bridge
+

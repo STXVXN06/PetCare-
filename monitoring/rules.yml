@@ -3,13 +3,15 @@ groups:
     interval: 10s
     rules:
       - alert: CPUAlta
-        expr: avg(rate(container_cpu_usage_seconds_total[2m])) * 100 > 30
-        for: 1m
+        expr: avg(rate(container_cpu_usage_seconds_total[2m])) * 100 > 15
+        for: 30s
         labels:
           severity: warning
         annotations:
           summary: "Uso alto de CPU detectado"
-          description: "El contenedor supera el 80% de CPU durante más de 1 minuto."
+          description: "El contenedor supera el 15% de CPU durante más de 1 minuto."
+
+     
 
       # Alerta por alto uso de memoria
       - alert: HighMemoryUsage

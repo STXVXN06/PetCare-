@@ -3,44 +3,48 @@ package com.stxvxn.app.service;
 import com.stxvxn.app.dto.CreatePackageRequest;
 import com.stxvxn.app.dto.PackageResponse;
 import com.stxvxn.app.dto.UpdateStatusRequest;
+import com.stxvxn.app.dto.response.PageResponse;
+import com.stxvxn.app.exception.PackageNotFoundException;
 import com.stxvxn.app.model.Package;
 import com.stxvxn.app.model.PackageStatus;
 import com.stxvxn.app.repository.PackageRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.stxvxn.app.util.TrackingNumberGenerator;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Implementación del servicio para gestión de paquetes
+ * Implementación del servicio para gestión de paquetes.
  */
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class PackageServiceImpl implements PackageService {
     
-    @Autowired
-    private PackageRepository packageRepository;
-    
-    @Autowired
-    private NotificationService notificationService;
+    private final PackageRepository packageRepository;
+    private final ValidationService validationService;
+    private final TrackingNumberGenerator trackingNumberGenerator;
+    private final EventPublisherService eventPublisherService;
     
     @Override
     @Transactional
     public PackageResponse createPackage(CreatePackageRequest request) {
-        // Validar datos
-        if (request.getRecipientName() == null || request.getRecipientName().trim().isEmpty()) {
-            throw new IllegalArgumentException("El nombre del destinatario es requerido");
-        }
-        if (request.getRecipientPhone() == null || request.getRecipientPhone().trim().isEmpty()) {
-            throw new IllegalArgumentException("El teléfono del destinatario es requerido");
-        }
+        log.info("Creating package for recipient: {}", request.getRecipientName());
         
-        // Generar número de rastreo único
-        String trackingNumber = generateTrackingNumber();
+        // Validar datos usando ValidationService
+        validationService.validatePackageData(request);
+        
+        // Generar número de rastreo único usando TrackingNumberGenerator
+        String trackingNumber = trackingNumberGenerator.generateUnique(packageRepository);
+        log.debug("Generated tracking number: {}", trackingNumber);
         
         // Crear nuevo paquete
         Package pkg = new Package(
@@ -57,26 +61,25 @@ public class PackageServiceImpl implements PackageService {
         
         // Guardar en base de datos
         Package savedPackage = packageRepository.save(pkg);
+        log.info("Package created successfully with ID: {} and tracking: {}", 
+                 savedPackage.getId(), savedPackage.getTrackingNumber());
         
-        // Crear notificación inicial
-        notificationService.createStatusUpdateNotification(
-            savedPackage.getId(),
-            savedPackage.getTrackingNumber(),
-            savedPackage.getRecipientPhone(),
-            savedPackage.getStatus()
-        );
+        // Publicar evento (el listener se encargará de crear la notificación)
+        eventPublisherService.publishPackageCreatedEvent(savedPackage);
         
         return new PackageResponse(savedPackage);
     }
     
     @Override
     public Optional<PackageResponse> findById(String id) {
+        log.debug("Finding package by ID: {}", id);
         return packageRepository.findById(id)
                 .map(PackageResponse::new);
     }
     
     @Override
     public Optional<PackageResponse> findByTrackingNumber(String trackingNumber) {
+        log.debug("Finding package by tracking number: {}", trackingNumber);
         return packageRepository.findByTrackingNumber(trackingNumber)
                 .map(PackageResponse::new);
     }
@@ -89,10 +92,32 @@ public class PackageServiceImpl implements PackageService {
     }
     
     @Override
+    public PageResponse<PackageResponse> findAll(Pageable pageable) {
+        log.debug("Finding all packages with pagination: page={}, size={}", 
+                 pageable.getPageNumber(), pageable.getPageSize());
+        
+        Page<Package> page = packageRepository.findAll(pageable);
+        Page<PackageResponse> responsePage = page.map(PackageResponse::new);
+        
+        return new PageResponse<>(responsePage);
+    }
+    
+    @Override
     public List<PackageResponse> findByStatus(PackageStatus status) {
         return packageRepository.findByStatus(status).stream()
                 .map(PackageResponse::new)
                 .collect(Collectors.toList());
+    }
+    
+    @Override
+    public PageResponse<PackageResponse> findByStatus(PackageStatus status, Pageable pageable) {
+        log.debug("Finding packages by status {} with pagination: page={}, size={}", 
+                 status, pageable.getPageNumber(), pageable.getPageSize());
+        
+        Page<Package> page = packageRepository.findByStatus(status, pageable);
+        Page<PackageResponse> responsePage = page.map(PackageResponse::new);
+        
+        return new PageResponse<>(responsePage);
     }
     
     @Override
@@ -105,21 +130,18 @@ public class PackageServiceImpl implements PackageService {
     @Override
     @Transactional
     public Optional<PackageResponse> updateStatus(String trackingNumber, UpdateStatusRequest request) {
-        Optional<Package> pkgOpt = packageRepository.findByTrackingNumber(trackingNumber);
+        log.info("Updating status for tracking: {} to status: {} by employee: {}", 
+                 trackingNumber, request.getStatus(), request.getUpdatedBy());
         
-        if (pkgOpt.isEmpty()) {
-            return Optional.empty();
-        }
+        // Buscar paquete
+        Package pkg = packageRepository.findByTrackingNumber(trackingNumber)
+                .orElseThrow(() -> new PackageNotFoundException(trackingNumber));
         
-        Package pkg = pkgOpt.get();
+        PackageStatus oldStatus = pkg.getStatus();
         PackageStatus newStatus = request.getStatus();
         
-        // Validar transición de estado
-        if (!pkg.getStatus().canTransitionTo(newStatus)) {
-            throw new IllegalStateException(
-                "No se puede cambiar de " + pkg.getStatus() + " a " + newStatus
-            );
-        }
+        // Validar transición de estado usando ValidationService
+        validationService.validateStatusTransition(oldStatus, newStatus);
         
         // Actualizar ubicación si se proporciona
         if (request.getLocation() != null && !request.getLocation().trim().isEmpty()) {
@@ -136,13 +158,14 @@ public class PackageServiceImpl implements PackageService {
         
         // Guardar cambios
         Package updatedPackage = packageRepository.save(pkg);
+        log.info("Package status updated successfully: {} ({} -> {})", 
+                 trackingNumber, oldStatus, newStatus);
         
-        // Crear notificación de cambio de estado
-        notificationService.createStatusUpdateNotification(
-            updatedPackage.getId(),
-            updatedPackage.getTrackingNumber(),
-            updatedPackage.getRecipientPhone(),
-            newStatus
+        // Publicar evento (el listener se encargará de crear la notificación)
+        eventPublisherService.publishStatusChangedEvent(
+            updatedPackage, 
+            oldStatus, 
+            updatedBy
         );
         
         return Optional.of(new PackageResponse(updatedPackage));
@@ -150,17 +173,10 @@ public class PackageServiceImpl implements PackageService {
     
     @Override
     public String generateTrackingNumber() {
-        // Generar número de rastreo único (formato: TRK-XXXXXXXX)
-        String uuid = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
-        String trackingNumber = "TRK-" + uuid;
-        
-        // Verificar que no exista
-        while (packageRepository.findByTrackingNumber(trackingNumber).isPresent()) {
-            uuid = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
-            trackingNumber = "TRK-" + uuid;
-        }
-        
-        return trackingNumber;
+        // Este método ahora delega a TrackingNumberGenerator
+        // Se mantiene por compatibilidad con la interfaz
+        log.debug("Generating tracking number using TrackingNumberGenerator");
+        return trackingNumberGenerator.generateUnique(packageRepository);
     }
     
     /**
